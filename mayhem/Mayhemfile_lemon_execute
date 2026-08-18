@@ -1,0 +1,27 @@
+project: savantenvs/lemon
+target: lemon_execute
+
+# Two-entry seed directive per docs/seed-corpus.md: server-accumulated corpus tar + git-tracked
+# seeds. (mayhem-lint: keep-testsuite)
+testsuite:
+  - https://$MAYHEM_DOMAIN/$MAYHEM_PROJECT/$MAYHEM_TARGET/testsuite.tar
+  - file://mayhem/lemon_execute/testsuite
+
+# RAW file-input target (`@@` = the fuzzed .lm script), same shape and rationale as the `lemon`
+# target's mayhem/Mayhemfile: /mayhem/lemon_execute is a real program (mayhem/raw_main.c main() +
+# mayhem/fuzz_execute.c) that compiles AND RUNS the script through lemon_machine_execute() -- the
+# DEEP counterpart of the front-end-only `lemon` target -- so it inherits every front-end crash PLUS
+# execute-time crashes across a much larger surface (the VM dispatch loop, collector/GC, and the l*
+# runtime object model). No libFuzzer entry point in the binary; built with -fsanitize=fuzzer-no-link
+# so SanitizerCoverage edge counters are present and Mayhem records coverage. One process per input:
+# this target's accumulated corpus contains crashing inputs, which an in-process libFuzzer run would
+# abort on while loading the corpus (issue #1313). Exit status 1 = Lemon rejected the script.
+#
+# Hangs: the harness has NO timer of its own (issue #1298) -- this explicit per-test `timeout:`
+# is the ONLY bound on a script that never terminates (`while (true) {}`), and Mayhem kills the
+# process when it expires. It is set explicitly because Mayhem's 2 s default is too tight: like
+# the `lemon` target, deeply nested inputs drive the recursive parser near its stack limit under
+# ASan, and Mayhem's syscall-tracing smoketest multiplies runtime on top of compile + execute.
+cmds:
+  - cmd: /mayhem/lemon_execute @@
+    timeout: 15

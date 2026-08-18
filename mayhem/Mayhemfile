@@ -1,0 +1,24 @@
+project: savantenvs/lemon
+target: lemon
+
+# Two-entry seed directive per docs/seed-corpus.md: server-accumulated corpus tar + git-tracked
+# seeds. (mayhem-lint: keep-testsuite)
+testsuite:
+  - https://$MAYHEM_DOMAIN/$MAYHEM_PROJECT/$MAYHEM_TARGET/testsuite.tar
+  - file://mayhem/lemon/testsuite
+
+# RAW file-input target (`@@` = the fuzzed .lm script): /mayhem/lemon_compile is a real program
+# (mayhem/raw_main.c main() + mayhem/fuzz_compile.c) that compiles the script with the Lemon
+# front end and does not run it -- no libFuzzer entry point in the binary. Built with
+# -fsanitize=fuzzer-no-link so SanitizerCoverage edge counters are present and Mayhem records
+# coverage (see mayhem/build.sh). One process per input, because lemon has real, shallow front-end
+# crashes (a 1-byte `-` overflows the parser's stack; `var ;` NULL-derefs at src/compiler.c:1009)
+# and this target's accumulated corpus contains such inputs: as a per-input process each is a
+# defect while the run stays healthy, whereas an in-process libFuzzer run aborts while loading the
+# corpus (issue #1313). Exit status 1 = Lemon rejected the script (a normal outcome, not a crash).
+# Hangs are bounded ONLY by this explicit per-test timeout (no harness timer, issue #1298); it is
+# well above Mayhem's 2 s default because deeply nested inputs drive the recursive parser near its
+# stack limit under ASan, inflating past 2 s under Mayhem's syscall-tracing smoketest.
+cmds:
+  - cmd: /mayhem/lemon_compile @@
+    timeout: 30
